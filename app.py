@@ -33,7 +33,104 @@ if "portfolio" not in st.session_state:
         "purchase_price", "beckett", "ebay_sold", "ebay_active", "date_added"
     ])
 
-# ---------- HELPER FUNCTIONS ----------
+# ---------- OCR FUNCTIONS ----------
+def get_ocr_space_text(image):
+    try:
+        api_key = st.secrets["OCR_SPACE_API_KEY"]
+    except Exception:
+        st.error("OCR API key not found in Secrets.")
+        return []
+
+    buffered = io.BytesIO()
+    image.save(buffered, format="JPEG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+
+    payload = {
+        "apikey": api_key,
+        "base64Image": f"data:image/jpeg;base64,{img_str}",
+        "language": "eng",
+        "isOverlayRequired": False,
+        "OCREngine": 2
+    }
+
+    try:
+        r = requests.post(
+            "https://api.ocr.space/parse/image",
+            data=payload,
+            timeout=30
+        )
+        result = r.json()
+
+        if result.get("IsErroredOnProcessing"):
+            return []
+
+        parsed = result.get("ParsedResults", [])
+        if parsed:
+            text = parsed[0].get("ParsedText", "")
+            return [x.strip() for x in text.split("\n") if x.strip()]
+        return []
+    except Exception:
+        return []
+
+def analyze_card_text(texts):
+    full = " ".join(texts).lower()
+    card_name = ""
+    set_name = ""
+    year = 2024
+    parallel = "Base"
+
+    year_match = re.search(r"\b(202[0-6])\b", full)
+    if year_match:
+        year = int(year_match.group(1))
+
+    sets = {
+        "prizm": "Panini Prizm",
+        "optic": "Donruss Optic",
+        "mosaic": "Panini Mosaic",
+        "select": "Panini Select",
+        "donruss": "Donruss",
+        "topps": "Topps",
+        "chrome": "Topps Chrome",
+        "bowman": "Bowman"
+    }
+
+    for key, val in sets.items():
+        if key in full:
+            set_name = f"{year} {val}"
+            break
+
+    parallels = ["silver", "gold", "prizm", "holo", "refractor", "green", "blue", "red"]
+    for p in parallels:
+        if p in full:
+            parallel = p.title()
+            break
+
+    ignore = {
+        "panini", "prizm", "optic", "mosaic", "select",
+        "donruss", "topps", "the", "of", "and", "rookie", "rc", "card"
+    }
+
+    candidates = []
+    for t in texts:
+        clean = t.strip()
+        if len(clean) > 5 and not any(w in clean.lower() for w in ignore):
+            candidates.append(clean)
+
+    if candidates:
+        card_name = sorted(candidates, key=len, reverse=True)[0]
+
+    if ("rookie" in full or "rc" in full) and card_name:
+        if "rookie" not in card_name.lower():
+            card_name += " Rookie"
+
+    return {
+        "card_name": card_name,
+        "set": set_name,
+        "year": year,
+        "parallel": parallel,
+        "raw_text": texts
+    }
+
 def make_links(card_name, set_name, year, parallel):
     query = f"{year} {set_name} {card_name} {parallel} PSA BGS".strip()
     query = re.sub(r'\s+', ' ', query)
@@ -126,7 +223,7 @@ def show_login_page():
                 except Exception as e:
                     st.error(f"Sign up failed: {e}")
 
-# ---------- MAIN APP (ONLY SHOWN WHEN LOGGED IN) ----------
+# ---------- MAIN APP ----------
 def show_main_app():
     st.title("🏈 Cardly")
     st.caption(f"Logged in as {st.session_state.user.email}")
@@ -144,18 +241,38 @@ def show_main_app():
 
     uploaded = st.file_uploader("Upload or take a photo of the card", type=["jpg", "jpeg", "png"])
 
+    analysis = None
+
     if uploaded is not None:
         image = Image.open(uploaded).convert("RGB")
         st.image(image, caption="Uploaded Card", use_container_width=True)
 
+        with st.spinner("Reading card with OCR..."):
+            texts = get_ocr_space_text(image)
+            if texts:
+                analysis = analyze_card_text(texts)
+
+        if analysis and analysis.get("raw_text"):
+            with st.expander("Raw text detected by AI"):
+                st.write(analysis["raw_text"])
+
     with st.form("add_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
+
         with c1:
-            card_name = st.text_input("Card Name")
-            set_name = st.text_input("Set")
-            year = st.number_input("Year", value=2024, min_value=1980, max_value=2026)
+            default_name = analysis["card_name"] if analysis else ""
+            card_name = st.text_input("Card Name", value=default_name)
+
+            default_set = analysis["set"] if analysis else ""
+            set_name = st.text_input("Set", value=default_set)
+
+            default_year = analysis["year"] if analysis else 2024
+            year = st.number_input("Year", value=default_year, min_value=1980, max_value=2026)
+
         with c2:
-            parallel = st.text_input("Parallel", value="Base")
+            default_par = analysis["parallel"] if analysis else "Base"
+            parallel = st.text_input("Parallel", value=default_par)
+
             grade = st.number_input("Grade", value=9.5, min_value=1.0, max_value=10.0, step=0.5)
             price = st.number_input("Purchase Price ($)", value=0.0, min_value=0.0)
 
