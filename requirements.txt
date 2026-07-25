@@ -1,4 +1,6 @@
-gradio
+streamlit
 pandas
 pillow
+easyocr
+opencv-python-headless
 numpy
