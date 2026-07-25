@@ -100,4 +100,4 @@ def analyze_card_text(texts):
             break
 
     # Parallel keywords
-    parallel_keywords = ['silver', 'gold', 'prizm', 'holo', 'refractor', 'mojo',
+    parallel_keywords = ['silver', 'gold', 'prizm', 'holo', 'refractor', 'mojo', 'pulsar', 'disco', 'hyper', 'wave', 'green', 'blue', 'red']
