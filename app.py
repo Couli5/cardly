@@ -148,3 +148,37 @@ if uploaded_file is not None:
 
     if analysis and analysis.get("raw_text"):
         with st.expander("Raw text detected by AI"):
+            st.write(analysis["raw_text"])
+
+with st.form("add_card_form", clear_on_submit=True):
+    st.write("**Card Details** (AI suggestions — edit if needed)")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        card_name = st.text_input("Card Name", value=analysis["card_name"] if analysis else "", placeholder="e.g. Caleb Williams Rookie")
+        set_name = st.text_input("Set", value=analysis["set"] if analysis else "", placeholder="e.g. 2024 Panini Prizm")
+        year = st.number_input("Year", value=analysis["year"] if analysis else 2024, min_value=1980, max_value=2026)
+    with col2:
+        parallel = st.text_input("Parallel", value=analysis["parallel"] if analysis else "Base", placeholder="e.g. Base, Silver")
+        grade = st.number_input("Grade", value=9.5, min_value=1.0, max_value=10.0, step=0.5)
+        purchase_price = st.number_input("Purchase Price ($)", value=0.0, min_value=0.0)
+
+    submitted = st.form_submit_button("Add to Portfolio", use_container_width=True)
+
+    if submitted:
+        if not card_name.strip():
+            st.error("Please enter a Card Name")
+        else:
+            new_row = {
+                "card_name": card_name.strip(),
+                "set": set_name.strip() if set_name else "Unknown Set",
+                "year": year,
+                "parallel": parallel.strip() if parallel else "Base",
+                "grade": grade,
+                "purchase_price": purchase_price,
+                "est_value": 0,
+                "rarity": 0,
+                "link": "",
+                "date_added": datetime.now().strftime("%Y-%m-%d")
+            }
+            new_row["est_value"] = calculate_estimated_value(
