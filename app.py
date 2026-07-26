@@ -15,19 +15,40 @@ st.set_page_config(
     layout="centered"
 )
 
-# ---------- CUSTOM STYLING ----------
+# ---------- SPACE BACKGROUND STYLING ----------
 st.markdown("""
 <style>
     .stApp {
-        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
         color: white;
     }
+    
+    .stApp::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: 
+            radial-gradient(2px 2px at 20px 30px, #eee, rgba),
+            radial-gradient(2px 2px at 40px 70px, #fff, rgba),
+            radial-gradient(1px 1px at 90px 40px, #fff, rgba),
+            radial-gradient(1px 1px at 130px 80px, #fff, rgba),
+            radial-gradient(2px 2px at 160px 120px, #ddd, rgba);
+        background-repeat: repeat;
+        background-size: 200px 200px;
+        opacity: 0.25;
+        pointer-events: none;
+        z-index: 0;
+    }
+
     h1, h2, h3, p, label, .stMarkdown {
         color: white !important;
     }
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input {
-        background-color: #1e1e2f;
+        background-color: rgba(30, 30, 47, 0.85);
         color: white;
     }
     .stButton > button {
@@ -176,7 +197,6 @@ def show_login_page():
     st.title("🏈⚾ Cardly 🏀🏒")
     st.caption("Sign in to save and manage your sports card portfolio")
 
-    # Homepage buttons
     c1, c2, c3 = st.columns(3)
     with c1:
         st.link_button("Beckett", "https://www.beckett.com", use_container_width=True)
@@ -219,7 +239,6 @@ def show_main_app():
     st.title("🏈⚾ Cardly 🏀🏒")
     st.caption(f"Logged in as {st.session_state.user.email}")
 
-    # Homepage buttons
     c1, c2, c3 = st.columns(3)
     with c1:
         st.link_button("Beckett", "https://www.beckett.com", use_container_width=True)
@@ -236,7 +255,6 @@ def show_main_app():
 
     st.divider()
 
-    # Add Card Section
     st.subheader("📸 Add New Card")
     uploaded = st.file_uploader("Upload or take a photo of the card", type=["jpg", "jpeg", "png"])
     analysis = None
@@ -285,7 +303,6 @@ def show_main_app():
                 save_user_portfolio(st.session_state.user.id, st.session_state.portfolio)
                 st.success(f"Added {card_name}")
 
-    # Portfolio Section
     st.subheader("Your Portfolio")
     df = st.session_state.portfolio
 
