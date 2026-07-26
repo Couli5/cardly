@@ -15,7 +15,30 @@ st.set_page_config(
     layout="centered"
 )
 
-# ---------- SUPABASE CONNECTION ----------
+# ---------- CUSTOM STYLING ----------
+st.markdown("""
+<style>
+    .stApp {
+        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        color: white;
+    }
+    h1, h2, h3, p, label, .stMarkdown {
+        color: white !important;
+    }
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input {
+        background-color: #1e1e2f;
+        color: white;
+    }
+    .stButton > button {
+        background-color: #4f46e5;
+        color: white;
+        border-radius: 8px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ---------- SUPABASE ----------
 @st.cache_resource
 def init_supabase() -> Client:
     url = st.secrets["SUPABASE_URL"]
@@ -30,15 +53,14 @@ if "user" not in st.session_state:
 if "portfolio" not in st.session_state:
     st.session_state.portfolio = pd.DataFrame(columns=[
         "card_name", "set", "year", "parallel", "grade",
-        "purchase_price", "beckett", "ebay_sold", "ebay_active", "date_added"
+        "beckett", "ebay_active", "date_added"
     ])
 
-# ---------- OCR FUNCTIONS ----------
+# ---------- HELPER FUNCTIONS ----------
 def get_ocr_space_text(image):
     try:
         api_key = st.secrets["OCR_SPACE_API_KEY"]
     except Exception:
-        st.error("OCR API key not found in Secrets.")
         return []
 
     buffered = io.BytesIO()
@@ -54,16 +76,10 @@ def get_ocr_space_text(image):
     }
 
     try:
-        r = requests.post(
-            "https://api.ocr.space/parse/image",
-            data=payload,
-            timeout=30
-        )
+        r = requests.post("https://api.ocr.space/parse/image", data=payload, timeout=30)
         result = r.json()
-
         if result.get("IsErroredOnProcessing"):
             return []
-
         parsed = result.get("ParsedResults", [])
         if parsed:
             text = parsed[0].get("ParsedText", "")
@@ -105,38 +121,20 @@ def analyze_card_text(texts):
             parallel = p.title()
             break
 
-    ignore = {
-        "panini", "prizm", "optic", "mosaic", "select",
-        "donruss", "topps", "the", "of", "and", "rookie", "rc", "card"
-    }
-
-    candidates = []
-    for t in texts:
-        clean = t.strip()
-        if len(clean) > 5 and not any(w in clean.lower() for w in ignore):
-            candidates.append(clean)
-
+    ignore = {"panini", "prizm", "optic", "mosaic", "select", "donruss", "topps", "the", "of", "and", "rookie", "rc", "card"}
+    candidates = [t.strip() for t in texts if len(t.strip()) > 5 and not any(w in t.lower() for w in ignore)]
     if candidates:
         card_name = sorted(candidates, key=len, reverse=True)[0]
 
-    if ("rookie" in full or "rc" in full) and card_name:
-        if "rookie" not in card_name.lower():
-            card_name += " Rookie"
+    if ("rookie" in full or "rc" in full) and card_name and "rookie" not in card_name.lower():
+        card_name += " Rookie"
 
-    return {
-        "card_name": card_name,
-        "set": set_name,
-        "year": year,
-        "parallel": parallel,
-        "raw_text": texts
-    }
+    return {"card_name": card_name, "set": set_name, "year": year, "parallel": parallel, "raw_text": texts}
 
 def make_links(card_name, set_name, year, parallel):
     query = f"{year} {set_name} {card_name} {parallel} PSA BGS".strip()
     query = re.sub(r'\s+', ' ', query)
     encoded = urllib.parse.quote(query)
-
-    ebay_sold = f"https://www.ebay.com/sch/i.html?_nkw={encoded}&LH_Sold=1&LH_Complete=1"
     ebay_active = f"https://www.ebay.com/sch/i.html?_nkw={encoded}"
 
     slug = f"{year}-{set_name}".lower()
@@ -144,25 +142,17 @@ def make_links(card_name, set_name, year, parallel):
     slug = re.sub(r'\s+', '-', slug.strip())
     beckett = f"https://www.beckett.com/news/{slug}-cards/"
 
-    return beckett, ebay_sold, ebay_active
+    return beckett, ebay_active
 
 def load_user_portfolio(user_id: str):
     try:
         res = supabase.table("portfolios").select("cards").eq("user_id", user_id).execute()
-        if res.data and len(res.data) > 0:
-            cards = res.data[0]["cards"]
-            if cards:
-                return pd.DataFrame(cards)
-        return pd.DataFrame(columns=[
-            "card_name", "set", "year", "parallel", "grade",
-            "purchase_price", "beckett", "ebay_sold", "ebay_active", "date_added"
-        ])
+        if res.data and len(res.data) > 0 and res.data[0]["cards"]:
+            return pd.DataFrame(res.data[0]["cards"])
+        return pd.DataFrame(columns=["card_name", "set", "year", "parallel", "grade", "beckett", "ebay_active", "date_added"])
     except Exception as e:
         st.error(f"Error loading portfolio: {e}")
-        return pd.DataFrame(columns=[
-            "card_name", "set", "year", "parallel", "grade",
-            "purchase_price", "beckett", "ebay_sold", "ebay_active", "date_added"
-        ])
+        return pd.DataFrame(columns=["card_name", "set", "year", "parallel", "grade", "beckett", "ebay_active", "date_added"])
 
 def save_user_portfolio(user_id: str, df: pd.DataFrame):
     try:
@@ -181,10 +171,21 @@ def save_user_portfolio(user_id: str, df: pd.DataFrame):
     except Exception as e:
         st.error(f"Error saving portfolio: {e}")
 
-# ---------- AUTHENTICATION ----------
+# ---------- LOGIN PAGE ----------
 def show_login_page():
-    st.title("🏈 Cardly")
+    st.title("🏈⚾ Cardly 🏀🏒")
     st.caption("Sign in to save and manage your sports card portfolio")
+
+    # Homepage buttons
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.link_button("Beckett", "https://www.beckett.com", use_container_width=True)
+    with c2:
+        st.link_button("PSA", "https://www.psacard.com", use_container_width=True)
+    with c3:
+        st.link_button("Ebay", "https://www.ebay.com", use_container_width=True)
+
+    st.divider()
 
     tab1, tab2 = st.tabs(["Login", "Sign Up"])
 
@@ -192,41 +193,40 @@ def show_login_page():
         with st.form("login_form"):
             email = st.text_input("Email")
             password = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Login", use_container_width=True)
-
-            if submit:
+            if st.form_submit_button("Login", use_container_width=True):
                 try:
-                    res = supabase.auth.sign_in_with_password({
-                        "email": email,
-                        "password": password
-                    })
+                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     st.session_state.user = res.user
                     st.session_state.portfolio = load_user_portfolio(res.user.id)
-                    st.success("Logged in successfully!")
+                    st.success("Logged in!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Login failed: {e}")
 
     with tab2:
         with st.form("signup_form"):
-            email = st.text_input("Email", key="signup_email")
-            password = st.text_input("Password", type="password", key="signup_password")
-            submit = st.form_submit_button("Create Account", use_container_width=True)
-
-            if submit:
+            email = st.text_input("Email", key="su_email")
+            password = st.text_input("Password", type="password", key="su_pass")
+            if st.form_submit_button("Create Account", use_container_width=True):
                 try:
-                    res = supabase.auth.sign_up({
-                        "email": email,
-                        "password": password
-                    })
-                    st.success("Account created! Please check your email to confirm, then log in.")
+                    supabase.auth.sign_up({"email": email, "password": password})
+                    st.success("Account created! Check your email to confirm, then log in.")
                 except Exception as e:
                     st.error(f"Sign up failed: {e}")
 
 # ---------- MAIN APP ----------
 def show_main_app():
-    st.title("🏈 Cardly")
+    st.title("🏈⚾ Cardly 🏀🏒")
     st.caption(f"Logged in as {st.session_state.user.email}")
+
+    # Homepage buttons
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.link_button("Beckett", "https://www.beckett.com", use_container_width=True)
+    with c2:
+        st.link_button("PSA", "https://www.psacard.com", use_container_width=True)
+    with c3:
+        st.link_button("Ebay", "https://www.ebay.com", use_container_width=True)
 
     if st.button("Log out"):
         supabase.auth.sign_out()
@@ -236,11 +236,9 @@ def show_main_app():
 
     st.divider()
 
-    # ----- ADD CARD -----
+    # Add Card Section
     st.subheader("📸 Add New Card")
-
     uploaded = st.file_uploader("Upload or take a photo of the card", type=["jpg", "jpeg", "png"])
-
     analysis = None
 
     if uploaded is not None:
@@ -258,76 +256,46 @@ def show_main_app():
 
     with st.form("add_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
-
         with c1:
-            default_name = analysis["card_name"] if analysis else ""
-            card_name = st.text_input("Card Name", value=default_name)
-
-            default_set = analysis["set"] if analysis else ""
-            set_name = st.text_input("Set", value=default_set)
-
-            default_year = analysis["year"] if analysis else 2024
-            year = st.number_input("Year", value=default_year, min_value=1980, max_value=2026)
-
+            card_name = st.text_input("Card Name", value=analysis["card_name"] if analysis else "")
+            set_name = st.text_input("Set", value=analysis["set"] if analysis else "")
+            year = st.number_input("Year", value=analysis["year"] if analysis else 2024, min_value=1980, max_value=2026)
         with c2:
-            default_par = analysis["parallel"] if analysis else "Base"
-            parallel = st.text_input("Parallel", value=default_par)
-
+            parallel = st.text_input("Parallel", value=analysis["parallel"] if analysis else "Base")
             grade = st.number_input("Grade", value=9.5, min_value=1.0, max_value=10.0, step=0.5)
-            price = st.number_input("Purchase Price ($)", value=0.0, min_value=0.0)
 
-        submitted = st.form_submit_button("Add to Portfolio", use_container_width=True)
-
-        if submitted:
+        if st.form_submit_button("Add to Portfolio", use_container_width=True):
             if not card_name.strip():
                 st.error("Please enter a Card Name")
             else:
-                beckett, ebay_sold, ebay_active = make_links(
-                    card_name, set_name, year, parallel
-                )
-
+                beckett, ebay_active = make_links(card_name, set_name, year, parallel)
                 new_row = {
                     "card_name": card_name.strip(),
                     "set": set_name.strip() if set_name else "Unknown Set",
                     "year": year,
                     "parallel": parallel.strip() if parallel else "Base",
                     "grade": grade,
-                    "purchase_price": price,
                     "beckett": beckett,
-                    "ebay_sold": ebay_sold,
                     "ebay_active": ebay_active,
                     "date_added": datetime.now().strftime("%Y-%m-%d")
                 }
-
                 st.session_state.portfolio = pd.concat(
-                    [st.session_state.portfolio, pd.DataFrame([new_row])],
-                    ignore_index=True
+                    [st.session_state.portfolio, pd.DataFrame([new_row])], ignore_index=True
                 )
                 save_user_portfolio(st.session_state.user.id, st.session_state.portfolio)
                 st.success(f"Added {card_name}")
 
-    # ----- PORTFOLIO -----
+    # Portfolio Section
     st.subheader("Your Portfolio")
-
     df = st.session_state.portfolio
 
     if len(df) > 0:
-        total_cost = df["purchase_price"].sum()
-
-        m1, m2 = st.columns(2)
-        m1.metric("Cards", len(df))
-        m2.metric("Total Invested", f"${total_cost:,.2f}")
-
+        st.metric("Cards", len(df))
         st.dataframe(
-            df[[
-                "card_name", "set", "parallel", "grade",
-                "purchase_price", "beckett", "ebay_sold", "ebay_active"
-            ]],
+            df[["card_name", "set", "parallel", "grade", "beckett", "ebay_active"]],
             column_config={
                 "beckett": st.column_config.LinkColumn("Beckett", display_text="Beckett"),
-                "ebay_sold": st.column_config.LinkColumn("eBay Sold (Graded)", display_text="Sold"),
-                "ebay_active": st.column_config.LinkColumn("eBay Active", display_text="Active"),
-                "purchase_price": st.column_config.NumberColumn("Cost", format="$%.2f")
+                "ebay_active": st.column_config.LinkColumn("eBay", display_text="eBay")
             },
             use_container_width=True,
             hide_index=True
@@ -335,10 +303,8 @@ def show_main_app():
 
         st.markdown("---")
         st.write("**Delete a card**")
-
         options = [f"{i+1}. {row['card_name']} ({row['set']})" for i, row in df.iterrows()]
         selected = st.selectbox("Select card to delete", options)
-
         if st.button("Delete Selected Card", type="primary"):
             idx = int(selected.split(".")[0]) - 1
             st.session_state.portfolio = df.drop(idx).reset_index(drop=True)
@@ -348,7 +314,7 @@ def show_main_app():
     else:
         st.info("No cards yet. Add your first card above.")
 
-# ---------- APP ROUTING ----------
+# ---------- ROUTING ----------
 if st.session_state.user is None:
     show_login_page()
 else:
